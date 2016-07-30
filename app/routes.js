@@ -4,7 +4,7 @@ module.exports=function(app,passport){
 		 res.render('index.ejs');
 	});
 
-	app.get('/profile',function(req,res){
+	app.get('/profile', isLoggedIn,function(req,res){
 		res.render('profile.ejs',{
 			user:req.user
 		});
@@ -31,7 +31,7 @@ module.exports=function(app,passport){
 
 	app.post('/signup',passport.authenticate('local-signup',{
 		successRedirect:'/profile',
-		failureRedirect:'/login',
+		failureRedirect:'/signup',
 		failureFlash:true
 	}));
 
@@ -116,7 +116,7 @@ module.exports=function(app,passport){
 		});
 	});
 
-	app.get('unlink/google',isLoggedIn,function(req,res){
+	app.get('/unlink/google',isLoggedIn,function(req,res){
 		var user			=req.user;
 		user.google.token	=undefined;
 		user.save(function(error){

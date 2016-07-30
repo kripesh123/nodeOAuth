@@ -68,7 +68,42 @@ module.exports = function(passport) {
             email=email.toLowerCase();
         process.nextTick(function(){
             if(!req.user){
-                User.findOn
+                User.findOne({'local.email':email},function(error,user){
+                    if(error)
+                        return done(error);
+                    if(user){
+                        return done(null,false,req.flash('signupMessage','This email is already exist.'));
+                    }else{
+                        var newUser = new User();
+                        newUser.local.email=email;
+                        newUser.local.password=newUser.generateHash(password);
+
+                        newUser.save(function(error){
+                            if(error)
+                                return done(error);
+                            return done(null,newUser);
+                        });
+                    }
+                });
+            }else if(!req.user.local.email){
+                User.findOne({'local.email':email},function(error,user){
+                    if(error)
+                        return done(error);
+                    if(user){
+                        return done(null.false,req.flash('loginMessage','This email is already exist in our database'));
+                    }else{
+                        var user=req.user;
+                        user.local.email=email;
+                        user.local.password=user.generateHash(password);
+                        user.save(function(error){
+                            if(error)
+                                return done(error);
+                            return done(null,user);
+                        });
+                    }
+                }); 
+            }else{
+                return done(null,req.user);
             }
         });
     }));
@@ -78,53 +113,187 @@ module.exports = function(passport) {
     // =========================================================================
     passport.use(new FacebookStrategy({
 
-        // pull in our app id and secret from our auth.js file
+        
         clientID        : configAuth.facebookAuth.clientID,
         clientSecret    : configAuth.facebookAuth.clientSecret,
-        callbackURL     : configAuth.facebookAuth.callbackURL
-
+        callbackURL     : configAuth.facebookAuth.callbackURL,
+        profileFields   :['id','name','email'],
+        passReqToCallback:true
     },
 
-    // facebook will send back the token and profile
-    function(token, refreshToken, profile, done) {
+    
+    function(req, token, refreshToken, profile, done) {
 
         // asynchronous
         process.nextTick(function() {
+            if(!req.user){
+                User.findOne({'facebook.id':profile.id},function(error,user){
+                    if(error)
+                        return done(error);
 
-            // find the user in the database based on their facebook id
-            User.findOne({ 'facebook.id' : profile.id }, function(err, user) {
+                    if(user){
+                        if(!user.facebook.token){
+                            user.facebook.token=token;
+                            user.facebook.name=profile.name.givenName + ' ' + profile.name.familyName;
+                            user.facebook.email=(profile.emails[0].value || '').toLowerCase();
 
-                // if there is an error, stop everything and return that
-                // ie an error connecting to the database
-                if (err)
-                    return done(err);
+                            user.save(function(error){
+                                if(error)
+                                    return done(error);
+                                return done(null,user);
+                            });
+                        }
+                        return done(null,user);
+                    }else{
+                        var newUser=new User();
 
-                // if the user is found, then log them in
-                if (user) {
-                    return done(null, user); // user found, return that user
-                } else {
-                    // if there is no user found with that facebook id, create them
-                    var newUser            = new User();
+                        newUser.facebook.id     =profile.id;
+                        newUser.facebook.token  =token;
+                        newUser.facebook.name   =profile.name.givenName + ' ' + profile.name.familyName;
+                        newUser.facebook.email  =(profile.emails[0].value || '').toLowerCase();
 
-                    // set all of the facebook information in our user model
-                    newUser.facebook.id    = profile.id; // set the users facebook id                   
-                    newUser.facebook.token = token; // we will save the token that facebook provides to the user                    
-                    newUser.facebook.name  = profile.name.givenName + ' ' + profile.name.familyName; // look at the passport user profile to see how names are returned
-                    newUser.facebook.email = profile.emails[0].value; // facebook can return multiple emails so we'll take the first
+                        newUser.save(function(error){
+                            if(error)
+                                return done(error);
+                            return done(null,newUser);
+                        });
+                    }
+                });
+            }else{
+                var user = req.user;
+                user.facebook.id    =profile.id;
+                user.facebook.token =token;
+                user.facebook.name  =profile.name.givenName + ' ' + profile.name.familyName;
+                user.facebook.email =(profile.emails[0].value || '').toLowerCase();
 
-                    // save our user to the database
-                    newUser.save(function(err) {
-                        if (err)
-                            throw err;
+                user.save(function(error){
+                    if(error)
+                        return done(error)
 
-                        // if successful, return the new user
-                        return done(null, newUser);
-                    });
-                }
-
-            });
+                    return done(null,user);
+                });
+            }
         });
+    }));
+    // =========================================================================
+    // TWITTER ================================================================
+    // =========================================================================
 
+    passport.use(new TwitterStrategy({
+        consumerKey         :configAuth.twitterAuth.consumerKey,
+        consumerSecret      :configAuth.twitterAuth.consumerSecret,
+        callbackURL         :configAuth.twitterAuth.callbackURL,
+        passReqToCallback   :true
+    },
+    function(req,token,tokenSecret,profile,done){
+
+        process.nextTick(function(){
+
+            if(!req.user){
+                User.findOne({'twitter.id':profile.id},function(error,user){
+                    if(error)
+                        return done(error);
+
+                    if(user){
+                        if(!user.twitter.token){
+                            user.twitter.token      =token;
+                            user.twitter.username   =profile.username;
+                            user.twitter.displayName=profile.displayName;
+
+                            user.save(function(error){
+                                if(error)
+                                    return done(error);
+                                return done(null,user);
+                            });
+                        }
+                        return done(null,user);
+                    }else{
+                        var newUser              =new User();
+                        newUser.twitter.id       =profile.id;
+                        newUser.twitter.token    =token;
+                        newUser.twitter.username =profile.username;
+                        newUser.twitter.displayName=profile.displayName;
+
+                        newUser.save(function(error){
+                            if(error)
+                                return done(error);
+                            return done(null,newUser);
+                        })
+                    }
+                });
+            }else{
+                var user            =req.user;
+                user.twitter.id       =profile.id;
+                user.twitter.token    =token;
+                user.twitter.username =profile.username;
+                user.twitter.displayName=profile.displayName;
+
+                user.save(function(error){
+                    if(error)
+                        return done(error);
+                    return done(null,user);
+                });
+            }
+        });
     }));
 
+    //GOOGLE
+
+    passport.use(new GoogleStrategy({
+        clientID        :configAuth.googleAuth.clientID,
+        clientSecret    :configAuth.googleAuth.clientSecret,
+        callbackURL     :configAuth.googleAuth.callbackURL,
+        passReqToCallback:true
+    },
+    function(req,token,refreshToken,profile,done){
+
+        process.nextTick(function(){
+            if(!req.user){
+                User.findOne({'google.id':profile.id},function(error,user){
+                    if(error)
+                        return done(error);
+                    if(user){
+                        if(!user.google.token){
+                            user.google.token =token;
+                            user.google.name  =profile.displayName;
+                            user.google.email =(profile.emails[0].value).toLowerCase();
+
+                            user.save(function(error){
+                                if(error)
+                                    return done(error);
+
+                                return done(null,user);
+                            });
+                        }
+                        return done(null,user);
+                    }else{
+                        var newUser             =new User();
+                        newUser.google.id    =profile.id
+                        newUser.google.token =token;
+                        newUser.google.name  =profile.displayName;
+                        newUser.google.email =(profile.emails[0].value).toLowerCase();
+
+                        newUser.save(function(error){
+                            if(error)
+                                return done(error);
+
+                            return done(null,newUser);
+                        });
+                    }
+                });
+            }else{
+                var user            =req.user;
+                user.google.id    =profile.id;
+                user.google.token =token;
+                user.google.name  =profile.displayName;
+                user.google.email =(profile.emails[0].value).toLowerCase();
+
+                user.save(function(error){
+                    if(error)
+                        return done(error);
+                    return done(null,user);
+                });
+            }
+        });
+    }));
 };
